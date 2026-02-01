@@ -20,6 +20,7 @@ import { formatCurrency } from '@/lib/utils'
 import { exportToCSV } from '@/lib/csv-export'
 import { Button } from '@/components/ui/button'
 import { DollarSign, CreditCard, AlertCircle, TrendingUp, Download } from 'lucide-react'
+import { DateRangeFilter } from '@/components/filters/date-range-filter'
 
 export default function RevenuePage() {
   const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
@@ -112,6 +113,7 @@ export default function RevenuePage() {
         isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
+        filterElement={<DateRangeFilter />}
       />
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
         {/* Revenue KPIs */}

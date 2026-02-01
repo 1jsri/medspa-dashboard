@@ -11,6 +11,7 @@ interface HeaderProps {
   isLoading?: boolean
   lastUpdated?: string
   dataSource?: DataSource
+  filterElement?: React.ReactNode
 }
 
 function DataSourceBadge({ source }: { source: DataSource }) {
@@ -42,7 +43,7 @@ function DataSourceBadge({ source }: { source: DataSource }) {
   )
 }
 
-export function Header({ title, description, onRefresh, isLoading, lastUpdated, dataSource }: HeaderProps) {
+export function Header({ title, description, onRefresh, isLoading, lastUpdated, dataSource, filterElement }: HeaderProps) {
   return (
     <div className="flex items-center justify-between border-b bg-white px-6 py-4">
       <div>
@@ -52,6 +53,7 @@ export function Header({ title, description, onRefresh, isLoading, lastUpdated, 
         )}
       </div>
       <div className="flex items-center gap-4">
+        {filterElement}
         {dataSource && <DataSourceBadge source={dataSource} />}
         {lastUpdated && (
           <span className="text-xs text-slate-400">

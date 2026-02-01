@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatPercent, formatDate } from '@/lib/utils'
 import { Calendar, Users, TrendingUp, DollarSign, Target, Zap } from 'lucide-react'
+import { DateRangeFilter } from '@/components/filters/date-range-filter'
 
 export default function DashboardPage() {
   const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
@@ -47,6 +48,7 @@ export default function DashboardPage() {
         isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
+        filterElement={<DateRangeFilter />}
       />
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
         {/* KPI Cards */}

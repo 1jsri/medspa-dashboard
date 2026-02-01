@@ -18,6 +18,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { exportToCSV } from '@/lib/csv-export'
 import { Search, Download } from 'lucide-react'
+import { DateRangeFilter } from '@/components/filters/date-range-filter'
 import { Button } from '@/components/ui/button'
 import { Client, JourneyStage } from '@/types/dashboard'
 
@@ -188,6 +189,7 @@ export default function ClientsPage() {
         isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
+        filterElement={<DateRangeFilter />}
       />
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
         <Card>

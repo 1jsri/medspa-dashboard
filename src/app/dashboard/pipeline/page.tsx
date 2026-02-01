@@ -26,6 +26,7 @@ import { ClientListPanel } from '@/components/pipeline/client-list-panel'
 import { ClientDrawer } from '@/components/pipeline/client-drawer'
 import { ActionItems } from '@/components/pipeline/action-items'
 import type { JourneyStage, DashboardData } from '@/types/dashboard'
+import { DateRangeFilter } from '@/components/filters/date-range-filter'
 
 function PipelineContent({ data }: { data: DashboardData }) {
   const {
@@ -367,6 +368,7 @@ export default function PipelinePage() {
           isLoading={isLoading}
           lastUpdated={data.lastUpdated}
           dataSource={dataSource}
+          filterElement={<DateRangeFilter />}
         />
         <PipelineContent data={data} />
       </div>

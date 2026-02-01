@@ -73,11 +73,25 @@ function parsePrice(value: string | number | undefined): number {
   return isNaN(num) ? 0 : num
 }
 
-function parseDate(dateStr: string | undefined): string {
-  if (!dateStr) return ''
+function parseDate(value: string | number | undefined): string {
+  if (!value) return ''
 
-  // Handle dates like "June 30th"
-  const cleaned = String(dateStr).replace(/(\d+)(st|nd|rd|th)/i, '$1').trim()
+  // Handle numeric serial dates (Google Sheets returns these)
+  // Excel/Sheets serial: days since Dec 30, 1899
+  if (typeof value === 'number' || !isNaN(Number(value))) {
+    const numValue = typeof value === 'number' ? value : Number(value)
+    // Only treat as serial number if it's a reasonable range (>= 1 and looks like a date serial)
+    // Date serials are typically 5-digit numbers (e.g., 45678 = ~2025)
+    if (numValue >= 1 && numValue < 100000) {
+      const date = new Date((numValue - 25569) * 86400 * 1000)
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0]
+      }
+    }
+  }
+
+  // Handle string dates like "June 30th"
+  const cleaned = String(value).replace(/(\d+)(st|nd|rd|th)/i, '$1').trim()
 
   // Try parsing as a date
   const parsed = new Date(cleaned)

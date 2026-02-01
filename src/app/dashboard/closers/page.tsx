@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { Trophy, Medal, Award } from 'lucide-react'
+import { DateRangeFilter } from '@/components/filters/date-range-filter'
 
 export default function ClosersPage() {
   const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
@@ -55,6 +56,7 @@ export default function ClosersPage() {
         isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
+        filterElement={<DateRangeFilter />}
       />
       <div className="flex-1 p-6 space-y-6 overflow-y-auto">
         {/* Top Performers */}

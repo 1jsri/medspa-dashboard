@@ -3,6 +3,8 @@
 import useSWR from 'swr'
 import type { DashboardData, Client, CloserStats, FunnelStage, ActionItems } from '@/types/dashboard'
 import { useAuth } from './use-auth'
+import { useDateFilter } from '@/contexts/date-filter-context'
+import { DateBounds, isDateInRange } from '@/lib/date-utils'
 
 export type DataSource = 'google-sheets' | 'excel' | 'demo'
 
@@ -21,9 +23,79 @@ function filterClientsByCloser(clients: Client[], closerId: string): Client[] {
   return clients.filter((c) => c.closer === closerId)
 }
 
+// Filter clients by date range
+function filterClientsByDate(clients: Client[], bounds: DateBounds): Client[] {
+  // If no bounds (all time), return all clients
+  if (!bounds.start && !bounds.end) {
+    return clients
+  }
+
+  return clients.filter((c) => {
+    // Use bookingDate first (for leads), then purchaseDate (for closed deals), then callDate
+    const dateToCheck = c.bookingDate || c.purchaseDate || c.callDate
+    return isDateInRange(dateToCheck, bounds)
+  })
+}
+
 // Filter closer stats by closer ID
 function filterCloserStats(stats: CloserStats[], closerId: string): CloserStats[] {
   return stats.filter((s) => s.name === closerId)
+}
+
+// Recalculate closer stats from filtered clients
+function recalculateCloserStats(clients: Client[]): CloserStats[] {
+  const closerMap = new Map<string, {
+    totalCalls: number
+    attended: number
+    closed: number
+    noShows: number
+    revenue: number
+    cashCollected: number
+  }>()
+
+  clients.forEach((client) => {
+    const closer = client.closer || 'Unknown'
+    if (!closerMap.has(closer)) {
+      closerMap.set(closer, {
+        totalCalls: 0,
+        attended: 0,
+        closed: 0,
+        noShows: 0,
+        revenue: 0,
+        cashCollected: 0,
+      })
+    }
+
+    const stats = closerMap.get(closer)!
+    stats.totalCalls++
+
+    if (client.journeyStage === 'attended' || client.journeyStage === 'closed' || client.journeyStage === 'paid') {
+      stats.attended++
+    }
+
+    if (client.journeyStage === 'closed' || client.journeyStage === 'paid') {
+      stats.closed++
+      stats.revenue += client.actualPrice || 0
+      stats.cashCollected += client.cashCollected || 0
+    }
+
+    if (client.callStatus === 'No Show') {
+      stats.noShows++
+    }
+  })
+
+  return Array.from(closerMap.entries()).map(([name, stats]) => ({
+    name,
+    totalCalls: stats.totalCalls,
+    attended: stats.attended,
+    closed: stats.closed,
+    noShows: stats.noShows,
+    attendanceRate: stats.totalCalls > 0 ? stats.attended / stats.totalCalls : 0,
+    closeRate: stats.attended > 0 ? stats.closed / stats.attended : 0,
+    revenue: stats.revenue,
+    cashCollected: stats.cashCollected,
+    avgDealSize: stats.closed > 0 ? stats.revenue / stats.closed : 0,
+  }))
 }
 
 // Filter action items by closer ID
@@ -54,7 +126,7 @@ function recalculateFunnelStages(clients: Client[]): FunnelStage[] {
   return stages.map((s, i) => ({
     stage: s.stage,
     count: s.count,
-    percentage: total > 0 ? (s.count / total) * 100 : 0,
+    percentage: total > 0 ? s.count / total : 0,
     dropOff: i > 0 ? stages[i - 1].count - s.count : 0,
   }))
 }
@@ -125,8 +197,47 @@ function filterDataForRep(data: ApiResponse, closerId: string): ApiResponse {
   }
 }
 
+// Filter and recalculate all data based on date range
+function filterDataByDate(data: ApiResponse, bounds: DateBounds): ApiResponse {
+  // If no bounds (all time), return data as-is
+  if (!bounds.start && !bounds.end) {
+    return data
+  }
+
+  const filteredClients = filterClientsByDate(data.clients, bounds)
+
+  return {
+    ...data,
+    clients: filteredClients,
+    closerStats: recalculateCloserStats(filteredClients),
+    funnelStages: recalculateFunnelStages(filteredClients),
+    revenueData: recalculateRevenueData(filteredClients),
+    actionItems: {
+      noShowsToRescue: data.actionItems.noShowsToRescue.filter(c => {
+        const dateToCheck = c.bookingDate || c.purchaseDate || c.callDate
+        return isDateInRange(dateToCheck, bounds)
+      }),
+      warmLeadsToClose: data.actionItems.warmLeadsToClose.filter(c => {
+        const dateToCheck = c.bookingDate || c.purchaseDate || c.callDate
+        return isDateInRange(dateToCheck, bounds)
+      }),
+      unpaidBalances: data.actionItems.unpaidBalances.filter(c => {
+        const dateToCheck = c.bookingDate || c.purchaseDate || c.callDate
+        return isDateInRange(dateToCheck, bounds)
+      }),
+      staleLeads: data.actionItems.staleLeads.filter(c => {
+        const dateToCheck = c.bookingDate || c.purchaseDate || c.callDate
+        return isDateInRange(dateToCheck, bounds)
+      }),
+    },
+    kpis: recalculateKPIs(filteredClients),
+  }
+}
+
 export function useDashboardData() {
   const { user, isRep } = useAuth()
+  const { dateBounds, dateRange } = useDateFilter()
+
 
   const { data, error, isLoading, mutate } = useSWR<ApiResponse>(
     '/api/sheets',
@@ -138,10 +249,18 @@ export function useDashboardData() {
     }
   )
 
-  // Filter data based on user role
-  const filteredData = data && isRep && user?.closerId
-    ? filterDataForRep(data, user.closerId)
-    : data
+  // Apply filters in order: date filter first, then role filter
+  let filteredData = data
+
+  // Apply date filter
+  if (filteredData) {
+    filteredData = filterDataByDate(filteredData, dateBounds)
+  }
+
+  // Apply role filter (rep can only see their own data)
+  if (filteredData && isRep && user?.closerId) {
+    filteredData = filterDataForRep(filteredData, user.closerId)
+  }
 
   return {
     data: filteredData,
