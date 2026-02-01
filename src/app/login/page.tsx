@@ -119,17 +119,6 @@ export default function LoginPage() {
           </div>}>
             <LoginForm />
           </Suspense>
-
-          <div className="mt-6 border-t pt-4">
-            <p className="text-center text-xs text-slate-500">
-              Demo accounts:
-            </p>
-            <div className="mt-2 space-y-1 text-center text-xs text-slate-500">
-              <p>Manager: admin@medspa.com</p>
-              <p>Rep: hannah@medspa.com or michael@medspa.com</p>
-              <p className="text-slate-400">Password: medspa2024</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
