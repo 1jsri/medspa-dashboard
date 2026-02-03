@@ -1,8 +1,92 @@
 import type { RawSheetsData, BookedCallRow, SaleSubmissionRow } from '@/types/sheets'
 import type { Client, JourneyStage, DashboardData, CloserStats, FunnelStage, MonthlyRevenue, ActionItems } from '@/types/dashboard'
+import type { CalendlyBooking, CalendlyCallStatus } from '@/types/calendly'
 import { differenceInDays, parseISO, format, isAfter, subDays } from 'date-fns'
 import { normalizeNameForMatching } from './excel-reader'
 import { calculateMonthOverMonthTrends } from './trend-utils'
+
+/**
+ * Normalize email for matching
+ */
+function normalizeEmail(email: string): string {
+  return email.toLowerCase().trim()
+}
+
+/**
+ * Map Calendly booking status to existing callStatus enum
+ */
+function mapCalendlyStatus(status: CalendlyBooking['status']): CalendlyCallStatus {
+  switch (status) {
+    case 'scheduled':
+      return 'Scheduled'
+    case 'attended':
+      return 'Attended'
+    case 'no_show':
+      return 'No Show'
+    case 'canceled':
+      return 'Cancelled'
+    case 'rescheduled':
+      return 'Rescheduled'
+    default:
+      return 'Scheduled'
+  }
+}
+
+/**
+ * Merge Calendly bookings with existing client data
+ * Enriches client callDate and callStatus from Calendly if missing
+ */
+export function mergeCalendlyWithClients(
+  clients: Client[],
+  calendlyBookings: CalendlyBooking[]
+): Client[] {
+  if (!calendlyBookings || calendlyBookings.length === 0) {
+    return clients
+  }
+
+  // Create a map of Calendly bookings by normalized email
+  const calendlyByEmail = new Map<string, CalendlyBooking>()
+  for (const booking of calendlyBookings) {
+    if (booking.email) {
+      const normalizedEmail = normalizeEmail(booking.email)
+      // Keep the most recent booking for each email
+      const existing = calendlyByEmail.get(normalizedEmail)
+      if (!existing || booking.scheduledAt > existing.scheduledAt) {
+        calendlyByEmail.set(normalizedEmail, booking)
+      }
+    }
+  }
+
+  // Merge with clients
+  return clients.map(client => {
+    if (!client.email) return client
+
+    const normalizedEmail = normalizeEmail(client.email)
+    const calendlyBooking = calendlyByEmail.get(normalizedEmail)
+
+    if (!calendlyBooking) return client
+
+    // Enrich client with Calendly data if missing
+    const enrichedClient = { ...client }
+
+    // Update callDate if not set or if Calendly has more recent data
+    if (!client.callDate || (calendlyBooking.scheduledAt && calendlyBooking.scheduledAt > client.callDate)) {
+      enrichedClient.callDate = format(parseISO(calendlyBooking.scheduledAt), 'yyyy-MM-dd')
+    }
+
+    // Update callStatus if not set
+    if (!client.callStatus) {
+      enrichedClient.callStatus = mapCalendlyStatus(calendlyBooking.status)
+    }
+
+    // Update phone if not set and Calendly has it
+    if (!client.phone && calendlyBooking.phone) {
+      enrichedClient.phone = calendlyBooking.phone
+    }
+
+    return enrichedClient
+  })
+}
 
 function determineJourneyStage(bookedCall: BookedCallRow | null, sale: SaleSubmissionRow | null): JourneyStage {
   if (sale && sale.cashCollected > 0) return 'paid'
@@ -236,7 +320,8 @@ export function transformData(rawData: RawSheetsData): DashboardData {
 
   const totalBooked = clients.length
   const totalAttended = clients.filter(c => c.callStatus === 'Attended').length
-  const totalClosed = clients.filter(c => c.isConverted).length
+  // Only count conversions from attended calls (not sales without matching attended calls)
+  const totalClosed = clients.filter(c => c.callStatus === 'Attended' && c.isConverted).length
   const totalPaid = clients.filter(c => c.journeyStage === 'paid').length
   const totalRevenue = clients.reduce((sum, c) => sum + c.actualPrice, 0)
   const totalCashCollected = clients.reduce((sum, c) => sum + c.cashCollected, 0)

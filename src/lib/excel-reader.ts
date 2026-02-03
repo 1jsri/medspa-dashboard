@@ -383,19 +383,3 @@ export function readExcelData(): RawSheetsData {
   }
 }
 
-export function getDemoData(): RawSheetsData {
-  const bookedCalls: BookedCallRow[] = [
-    { clientName: 'Sarah Johnson', clientEmail: 'sarah.j@email.com', clientPhone: '555-0101', bookingDate: '2024-01-05', callDate: '2024-01-08', callStatus: 'Attended', closer: 'Hannah', expectedPackage: 'Premium Facial Package', expectedPrice: 2500, closedStatus: 'Closed', notes: '', currency: 'USD', setter: 'Michael', vibe: 'Hot', objection: null, lastContact: '2024-01-08', lastContactNotes: 'Great call, very interested', city: 'Toronto', state: 'Ontario' },
-    { clientName: 'Emily Chen', clientEmail: 'emily.chen@email.com', clientPhone: '555-0102', bookingDate: '2024-01-06', callDate: '2024-01-10', callStatus: 'Attended', closer: 'Michael', expectedPackage: 'Body Contouring', expectedPrice: 4000, closedStatus: 'Closed', notes: '', currency: 'USD', setter: 'Hannah', vibe: 'Warm', objection: null, lastContact: '2024-01-10', lastContactNotes: 'Discussed financing options', city: 'Vancouver', state: 'British Columbia' },
-  ]
-
-  const saleSubmissions: SaleSubmissionRow[] = [
-    { clientEmail: 'sarah.j@email.com', clientName: 'Sarah Johnson', clientPhone: '555-0101', bookingDate: '2024-01-05', purchaseDate: '2024-01-08', program: 'Premium Facial Package', price: 2500, cashCollected: 2500, balance: 0, paymentMethod: 'Credit Card', notes: '', closer: 'Hannah', setter: 'Michael', currency: 'USD', paymentStatus: '' },
-  ]
-
-  return {
-    bookedCalls,
-    saleSubmissions,
-    lastUpdated: new Date().toISOString(),
-  }
-}

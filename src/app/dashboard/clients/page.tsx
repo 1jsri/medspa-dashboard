@@ -33,7 +33,7 @@ const stageOrder: Record<JourneyStage, number> = {
 }
 
 export default function ClientsPage() {
-  const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
+  const { data, isLoading, isError, dataSource } = useDashboardData()
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('bookingDate')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -162,7 +162,7 @@ export default function ClientsPage() {
     return (
       <div className="flex flex-col h-full">
         <Header title="Clients" description="All client records" />
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-4 md:p-6">
           <DashboardSkeleton />
         </div>
       </div>
@@ -173,7 +173,7 @@ export default function ClientsPage() {
     return (
       <div className="flex flex-col h-full">
         <Header title="Clients" />
-        <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="flex-1 p-4 md:p-6 flex items-center justify-center">
           <p className="text-slate-500">Failed to load data. Please try again.</p>
         </div>
       </div>
@@ -185,13 +185,11 @@ export default function ClientsPage() {
       <Header
         title="Clients"
         description={`${data.clients.length} total clients`}
-        onRefresh={refresh}
-        isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
         filterElement={<DateRangeFilter />}
       />
-      <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+      <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

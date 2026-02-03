@@ -1,10 +1,11 @@
 'use client'
 
 import useSWR from 'swr'
-import type { DashboardData, Client, CloserStats, FunnelStage, ActionItems } from '@/types/dashboard'
+import type { DashboardData, Client, CloserStats, FunnelStage, ActionItems, KPIComparisons } from '@/types/dashboard'
 import { useAuth } from './use-auth'
 import { useDateFilter } from '@/contexts/date-filter-context'
 import { DateBounds, isDateInRange } from '@/lib/date-utils'
+import { getComparisonPeriod, calculateComparison } from '@/lib/comparison-utils'
 
 export type DataSource = 'google-sheets' | 'excel' | 'demo'
 
@@ -16,7 +17,20 @@ interface ApiResponse extends DashboardData {
   }
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const fetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const error = new Error('Failed to fetch dashboard data')
+    throw error
+  }
+  const data = await res.json()
+  // Check if API returned an error response
+  if (data.error) {
+    const error = new Error(data.error)
+    throw error
+  }
+  return data
+}
 
 // Filter clients by closer ID
 function filterClientsByCloser(clients: Client[], closerId: string): Client[] {
@@ -197,6 +211,18 @@ function filterDataForRep(data: ApiResponse, closerId: string): ApiResponse {
   }
 }
 
+// Type guard to verify we have valid dashboard data
+function isValidDashboardData(data: unknown): data is ApiResponse {
+  return (
+    data !== null &&
+    typeof data === 'object' &&
+    'clients' in data &&
+    Array.isArray((data as ApiResponse).clients) &&
+    'actionItems' in data &&
+    typeof (data as ApiResponse).actionItems === 'object'
+  )
+}
+
 // Filter and recalculate all data based on date range
 function filterDataByDate(data: ApiResponse, bounds: DateBounds): ApiResponse {
   // If no bounds (all time), return data as-is
@@ -234,12 +260,53 @@ function filterDataByDate(data: ApiResponse, bounds: DateBounds): ApiResponse {
   }
 }
 
+// Calculate KPI comparisons between current and previous period
+function calculateKPIComparisons(
+  currentKPIs: DashboardData['kpis'],
+  currentRevenueData: DashboardData['revenueData'],
+  previousKPIs: DashboardData['kpis'],
+  previousRevenueData: DashboardData['revenueData'],
+  comparisonLabel: string
+): KPIComparisons {
+  return {
+    totalRevenue: calculateComparison(
+      currentRevenueData.totalRevenue,
+      previousRevenueData.totalRevenue,
+      comparisonLabel,
+      false
+    ),
+    cashCollected: calculateComparison(
+      currentRevenueData.cashCollected,
+      previousRevenueData.cashCollected,
+      comparisonLabel,
+      false
+    ),
+    avgDealSize: calculateComparison(
+      currentRevenueData.avgDealSize,
+      previousRevenueData.avgDealSize,
+      comparisonLabel,
+      false
+    ),
+    conversionRate: calculateComparison(
+      currentKPIs.conversionRate,
+      previousKPIs.conversionRate,
+      comparisonLabel,
+      true
+    ),
+    closeRate: calculateComparison(
+      currentKPIs.closeRate,
+      previousKPIs.closeRate,
+      comparisonLabel,
+      true
+    ),
+  }
+}
+
 export function useDashboardData() {
   const { user, isRep } = useAuth()
-  const { dateBounds, dateRange } = useDateFilter()
+  const { dateBounds, filterState } = useDateFilter()
 
-
-  const { data, error, isLoading, mutate } = useSWR<ApiResponse>(
+  const { data, error, isLoading } = useSWR<ApiResponse>(
     '/api/sheets',
     fetcher,
     {
@@ -251,22 +318,47 @@ export function useDashboardData() {
 
   // Apply filters in order: date filter first, then role filter
   let filteredData = data
+  let comparisons: KPIComparisons | null = null
 
-  // Apply date filter
-  if (filteredData) {
+  // Only filter if we have valid dashboard data
+  if (filteredData && isValidDashboardData(filteredData)) {
+    // Apply date filter
     filteredData = filterDataByDate(filteredData, dateBounds)
-  }
 
-  // Apply role filter (rep can only see their own data)
-  if (filteredData && isRep && user?.closerId) {
-    filteredData = filterDataForRep(filteredData, user.closerId)
+    // Calculate comparison data
+    const comparisonPeriod = getComparisonPeriod(filterState)
+    if (comparisonPeriod && data) {
+      // Get clients for comparison period
+      let comparisonClients = filterClientsByDate(data.clients, comparisonPeriod.bounds)
+
+      // Apply rep filter to comparison data if needed
+      if (isRep && user?.closerId) {
+        comparisonClients = filterClientsByCloser(comparisonClients, user.closerId)
+      }
+
+      const comparisonKPIs = recalculateKPIs(comparisonClients)
+      const comparisonRevenueData = recalculateRevenueData(comparisonClients)
+
+      comparisons = calculateKPIComparisons(
+        filteredData.kpis,
+        filteredData.revenueData,
+        comparisonKPIs,
+        comparisonRevenueData,
+        comparisonPeriod.label
+      )
+    }
+
+    // Apply role filter (rep can only see their own data)
+    if (isRep && user?.closerId) {
+      filteredData = filterDataForRep(filteredData, user.closerId)
+    }
   }
 
   return {
     data: filteredData,
+    comparisons,
     isLoading,
     isError: error,
-    refresh: mutate,
     dataSource: data?._meta?.dataSource || 'demo',
   }
 }

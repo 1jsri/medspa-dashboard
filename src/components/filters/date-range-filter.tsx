@@ -2,10 +2,6 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useDateFilter } from '@/contexts/date-filter-context'
-import {
-  DateRangeType,
-  dateRangeLabels,
-} from '@/lib/date-utils'
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import {
   format,
@@ -15,6 +11,10 @@ import {
   endOfWeek,
   addMonths,
   subMonths,
+  addWeeks,
+  subWeeks,
+  addQuarters,
+  subQuarters,
   isSameDay,
   isSameMonth,
   isToday,
@@ -23,51 +23,75 @@ import {
   isAfter,
   startOfDay,
   endOfDay,
-  startOfWeek as getStartOfWeek,
   startOfQuarter,
-  startOfYear,
-  endOfWeek as getEndOfWeek,
   endOfQuarter,
-  endOfYear,
-  subWeeks,
-  subMonths as dateFnsSubMonths,
-  subQuarters,
-  subYears,
 } from 'date-fns'
 
-type PresetOption = {
-  key: string
-  label: string
-  type: DateRangeType
-  getRange?: () => { start: Date; end: Date }
+type PeriodType = 'all' | 'wtd' | 'mtd' | 'qtd' | 'custom'
+
+interface PeriodState {
+  type: PeriodType
+  offset: number // 0 = current, -1 = previous, -2 = two periods ago, etc.
 }
 
-const presets: PresetOption[] = [
-  { key: 'today', label: 'Today', type: 'today', getRange: () => ({ start: startOfDay(new Date()), end: endOfDay(new Date()) }) },
-  { key: 'wtd', label: 'This Week', type: 'wtd', getRange: () => ({ start: getStartOfWeek(new Date(), { weekStartsOn: 0 }), end: endOfDay(new Date()) }) },
-  { key: 'mtd', label: 'This Month', type: 'mtd', getRange: () => ({ start: startOfMonth(new Date()), end: endOfDay(new Date()) }) },
-  { key: 'qtd', label: 'This Quarter', type: 'qtd', getRange: () => ({ start: startOfQuarter(new Date()), end: endOfDay(new Date()) }) },
-  { key: 'ytd', label: 'This Year', type: 'ytd', getRange: () => ({ start: startOfYear(new Date()), end: endOfDay(new Date()) }) },
-  { key: 'divider1', label: '', type: 'all' },
-  { key: 'lastWeek', label: 'Last Week', type: 'lastWeek', getRange: () => {
-    const lastWeek = subWeeks(new Date(), 1)
-    return { start: getStartOfWeek(lastWeek, { weekStartsOn: 0 }), end: getEndOfWeek(lastWeek, { weekStartsOn: 0 }) }
-  }},
-  { key: 'lastMonth', label: 'Last Month', type: 'lastMonth', getRange: () => {
-    const lastMonth = dateFnsSubMonths(new Date(), 1)
-    return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) }
-  }},
-  { key: 'lastQuarter', label: 'Last Quarter', type: 'lastQuarter', getRange: () => {
-    const lastQuarter = subQuarters(new Date(), 1)
-    return { start: startOfQuarter(lastQuarter), end: endOfQuarter(lastQuarter) }
-  }},
-  { key: 'lastYear', label: 'Last Year', type: 'lastYear', getRange: () => {
-    const lastYear = subYears(new Date(), 1)
-    return { start: startOfYear(lastYear), end: endOfYear(lastYear) }
-  }},
-  { key: 'divider2', label: '', type: 'all' },
-  { key: 'all', label: 'All Time', type: 'all' },
-]
+function getDateRangeForPeriod(type: PeriodType, offset: number): { start: Date; end: Date } | null {
+  const now = new Date()
+
+  switch (type) {
+    case 'wtd': {
+      const targetWeekStart = offset === 0
+        ? startOfWeek(now, { weekStartsOn: 0 })
+        : startOfWeek(addWeeks(now, offset), { weekStartsOn: 0 })
+      const targetWeekEnd = offset === 0
+        ? endOfDay(now) // Week to date = start of week to now
+        : endOfWeek(addWeeks(now, offset), { weekStartsOn: 0 })
+      return { start: targetWeekStart, end: targetWeekEnd }
+    }
+    case 'mtd': {
+      const targetMonth = offset === 0 ? now : addMonths(now, offset)
+      const targetMonthStart = startOfMonth(targetMonth)
+      const targetMonthEnd = offset === 0
+        ? endOfDay(now) // Month to date = start of month to now
+        : endOfMonth(targetMonth)
+      return { start: targetMonthStart, end: targetMonthEnd }
+    }
+    case 'qtd': {
+      const targetQuarter = offset === 0 ? now : addQuarters(now, offset)
+      const targetQuarterStart = startOfQuarter(targetQuarter)
+      const targetQuarterEnd = offset === 0
+        ? endOfDay(now) // Quarter to date = start of quarter to now
+        : endOfQuarter(targetQuarter)
+      return { start: targetQuarterStart, end: targetQuarterEnd }
+    }
+    default:
+      return null
+  }
+}
+
+function formatPeriodLabel(type: PeriodType, offset: number): string {
+  const range = getDateRangeForPeriod(type, offset)
+  if (!range) return 'All Time'
+
+  const { start, end } = range
+
+  switch (type) {
+    case 'wtd':
+      return `${format(start, 'MMM d')} - ${format(end, 'MMM d, yyyy')}`
+    case 'mtd':
+      if (offset === 0) {
+        return `${format(start, 'MMM d')} - ${format(end, 'MMM d, yyyy')}`
+      }
+      return format(start, 'MMMM yyyy')
+    case 'qtd':
+      const quarter = Math.floor(start.getMonth() / 3) + 1
+      if (offset === 0) {
+        return `Q${quarter} ${format(start, 'yyyy')}: ${format(start, 'MMM d')} - ${format(end, 'MMM d')}`
+      }
+      return `Q${quarter} ${format(start, 'yyyy')}`
+    default:
+      return 'All Time'
+  }
+}
 
 function getDaysInMonth(date: Date): Date[] {
   const start = startOfWeek(startOfMonth(date), { weekStartsOn: 0 })
@@ -82,7 +106,6 @@ interface MonthCalendarProps {
   hoverDate: Date | null
   onDateClick: (date: Date) => void
   onDateHover: (date: Date | null) => void
-  hideTitle?: boolean
 }
 
 function MonthCalendar({
@@ -92,7 +115,6 @@ function MonthCalendar({
   hoverDate,
   onDateClick,
   onDateHover,
-  hideTitle = false,
 }: MonthCalendarProps) {
   const days = useMemo(() => getDaysInMonth(month), [month])
   const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -128,12 +150,7 @@ function MonthCalendar({
   }
 
   return (
-    <div className="w-[252px]">
-      {!hideTitle && (
-        <div className="text-center font-semibold text-slate-700 mb-3">
-          {format(month, 'MMMM yyyy')}
-        </div>
-      )}
+    <div className="w-full max-w-[280px]">
       <div className="grid grid-cols-7 gap-0">
         {weekDays.map((day) => (
           <div
@@ -183,366 +200,219 @@ function MonthCalendar({
   )
 }
 
-function useIsMobile(breakpoint = 640): boolean {
-  const [isMobile, setIsMobile] = useState(false)
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
-    setIsMobile(mediaQuery.matches)
-
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mediaQuery.addEventListener('change', handler)
-    return () => mediaQuery.removeEventListener('change', handler)
-  }, [breakpoint])
-
-  return isMobile
-}
-
 export function DateRangeFilter() {
   const {
-    dateRangeType,
-    displayLabel,
-    filterState,
-    setDateRangeType,
     setCustomRange,
     reset,
   } = useDateFilter()
 
-  const [isOpen, setIsOpen] = useState(false)
-  const [startDate, setStartDate] = useState<Date | null>(null)
-  const [endDate, setEndDate] = useState<Date | null>(null)
+  const [period, setPeriod] = useState<PeriodState>({ type: 'all', offset: 0 })
+  const [showCustomPicker, setShowCustomPicker] = useState(false)
+  const [customStart, setCustomStart] = useState<Date | null>(null)
+  const [customEnd, setCustomEnd] = useState<Date | null>(null)
   const [hoverDate, setHoverDate] = useState<Date | null>(null)
-  const [leftMonth, setLeftMonth] = useState(() => {
-    // Start with current month on the left
-    return startOfMonth(new Date())
-  })
-  const dropdownRef = useRef<HTMLDivElement>(null)
-  const isMobile = useIsMobile()
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()))
+  const pickerRef = useRef<HTMLDivElement>(null)
 
-  // Sync internal state with context when panel opens
+  // Apply filter when period changes
   useEffect(() => {
-    if (isOpen) {
-      if (filterState.dateRangeType === 'custom' && filterState.customStart && filterState.customEnd) {
-        setStartDate(filterState.customStart)
-        setEndDate(filterState.customEnd)
-        setLeftMonth(startOfMonth(filterState.customStart))
-      } else if (filterState.dateRangeType === 'specificMonth') {
-        const monthStart = new Date(filterState.selectedYear, filterState.selectedMonth, 1)
-        setStartDate(startOfMonth(monthStart))
-        setEndDate(endOfMonth(monthStart))
-        setLeftMonth(startOfMonth(monthStart))
-      } else {
-        setStartDate(null)
-        setEndDate(null)
-        setLeftMonth(startOfMonth(new Date()))
+    if (period.type === 'all') {
+      reset()
+    } else if (period.type !== 'custom') {
+      const range = getDateRangeForPeriod(period.type, period.offset)
+      if (range) {
+        setCustomRange(range.start, range.end)
       }
     }
-  }, [isOpen, filterState])
+  }, [period, reset, setCustomRange])
 
-  // Close dropdown when clicking outside (desktop only - modal has backdrop click)
+  // Close picker when clicking outside
   useEffect(() => {
-    if (isMobile) return // Modal handles its own close via backdrop
-
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setShowCustomPicker(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isMobile])
+  }, [])
 
-  // Close modal on Escape key
-  useEffect(() => {
-    if (!isOpen) return
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
+  const handlePresetClick = (type: PeriodType) => {
+    if (type === 'custom') {
+      setShowCustomPicker(true)
+      setCustomStart(null)
+      setCustomEnd(null)
+    } else {
+      setPeriod({ type, offset: 0 })
+      setShowCustomPicker(false)
     }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen])
+  }
 
-  // Prevent body scroll when modal is open on mobile
-  useEffect(() => {
-    if (isMobile && isOpen) {
-      document.body.style.overflow = 'hidden'
-      return () => {
-        document.body.style.overflow = ''
-      }
-    }
-  }, [isMobile, isOpen])
+  const handleNavigate = (direction: 'prev' | 'next') => {
+    if (period.type === 'all' || period.type === 'custom') return
 
-  const handlePresetClick = (preset: PresetOption) => {
-    if (preset.key.startsWith('divider')) return
+    const newOffset = direction === 'prev' ? period.offset - 1 : period.offset + 1
+    // Don't allow going into the future
+    if (newOffset > 0) return
 
-    setDateRangeType(preset.type)
-    setIsOpen(false)
+    setPeriod({ ...period, offset: newOffset })
   }
 
   const handleDateClick = (date: Date) => {
-    if (!startDate || (startDate && endDate)) {
-      // Start fresh selection
-      setStartDate(date)
-      setEndDate(null)
+    if (!customStart || (customStart && customEnd)) {
+      setCustomStart(date)
+      setCustomEnd(null)
     } else {
-      // Complete the range
-      if (isBefore(date, startDate)) {
-        setEndDate(startDate)
-        setStartDate(date)
+      if (isBefore(date, customStart)) {
+        setCustomEnd(customStart)
+        setCustomStart(date)
       } else {
-        setEndDate(date)
+        setCustomEnd(date)
       }
     }
   }
 
-  const handleApply = () => {
-    if (startDate && endDate) {
-      setCustomRange(startOfDay(startDate), endOfDay(endDate))
-      setIsOpen(false)
-    } else if (startDate) {
-      // Single day selected
-      setCustomRange(startOfDay(startDate), endOfDay(startDate))
-      setIsOpen(false)
+  const handleApplyCustom = () => {
+    if (customStart && customEnd) {
+      setCustomRange(startOfDay(customStart), endOfDay(customEnd))
+      setPeriod({ type: 'custom', offset: 0 })
+      setShowCustomPicker(false)
+    } else if (customStart) {
+      setCustomRange(startOfDay(customStart), endOfDay(customStart))
+      setPeriod({ type: 'custom', offset: 0 })
+      setShowCustomPicker(false)
     }
   }
 
-  const handleClear = () => {
-    setStartDate(null)
-    setEndDate(null)
-    reset()
-    setIsOpen(false)
-  }
+  const canNavigateNext = period.offset < 0
+  const showNavigation = period.type !== 'all' && period.type !== 'custom'
 
-  const navigateMonths = (direction: 'prev' | 'next') => {
-    setLeftMonth(prev => direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1))
-  }
+  const presets: { type: PeriodType; label: string }[] = [
+    { type: 'all', label: 'All Time' },
+    { type: 'wtd', label: 'WTD' },
+    { type: 'mtd', label: 'MTD' },
+    { type: 'qtd', label: 'QTD' },
+    { type: 'custom', label: 'Custom' },
+  ]
 
-  const getDisplayLabel = (): string => {
-    // If we have a pending selection (custom range being selected but not yet applied)
-    if (startDate && endDate && isOpen) {
-      return `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`
+  const getDisplayRange = (): string => {
+    if (period.type === 'custom' && customStart && customEnd) {
+      return `${format(customStart, 'MMM d')} - ${format(customEnd, 'MMM d, yyyy')}`
     }
-    return displayLabel
+    return formatPeriodLabel(period.type, period.offset)
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      {/* Trigger Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-sm"
-      >
-        <Calendar className="h-4 w-4 text-slate-500" />
-        <span className="font-medium text-slate-700">{getDisplayLabel()}</span>
-        <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-      </button>
+    <div className="flex flex-col gap-2">
+      {/* Segmented Control */}
+      <div className="inline-flex bg-slate-100 rounded-lg p-1">
+        {presets.map(({ type, label }) => (
+          <button
+            key={type}
+            onClick={() => handlePresetClick(type)}
+            className={`
+              px-3 py-1.5 text-sm font-medium rounded-md transition-all
+              ${period.type === type
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+              }
+            `}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {/* Desktop Panel - Dropdown */}
-      {isOpen && !isMobile && (
-        <div className="absolute right-0 top-full mt-2 bg-white rounded-lg shadow-xl border border-slate-200 z-50 overflow-hidden">
-          <div className="flex flex-row">
-            {/* Presets sidebar */}
-            <div className="w-36 border-r border-slate-200 p-3 bg-slate-50">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-2">
-                Presets
-              </p>
-              <div className="flex flex-col gap-0.5">
-                {presets.map((preset) => {
-                  if (preset.key.startsWith('divider')) {
-                    return <div key={preset.key} className="h-px bg-slate-200 my-2" />
-                  }
-
-                  const isActive = dateRangeType === preset.type && !startDate && !endDate
-
-                  return (
-                    <button
-                      key={preset.key}
-                      onClick={() => handlePresetClick(preset)}
-                      className={`
-                        whitespace-nowrap px-3 py-1.5 rounded-md text-sm transition-colors w-full text-left
-                        ${isActive
-                          ? 'bg-blue-100 text-blue-700 font-medium'
-                          : 'text-slate-600 hover:bg-slate-100'
-                        }
-                      `}
-                    >
-                      {preset.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Calendar section */}
-            <div className="p-4">
-              {/* Month Navigation */}
-              <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => navigateMonths('prev')}
-                  className="p-1 hover:bg-slate-100 rounded-md transition-colors"
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft className="h-5 w-5 text-slate-600" />
-                </button>
-                <div className="flex-1" />
-                <button
-                  onClick={() => navigateMonths('next')}
-                  className="p-1 hover:bg-slate-100 rounded-md transition-colors"
-                  aria-label="Next month"
-                >
-                  <ChevronRight className="h-5 w-5 text-slate-600" />
-                </button>
-              </div>
-
-              {/* Single Calendar */}
-              <MonthCalendar
-                month={leftMonth}
-                startDate={startDate}
-                endDate={endDate}
-                hoverDate={hoverDate}
-                onDateClick={handleDateClick}
-                onDateHover={setHoverDate}
-              />
-
-              {/* Helper text */}
-              <p className="text-xs text-slate-400 text-center mt-4">
-                {startDate && !endDate
-                  ? 'Click another date to complete your range'
-                  : 'Click a date to start, click another to end your range'
-                }
-              </p>
-
-              {/* Action buttons */}
-              <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-slate-100">
-                <button
-                  onClick={handleClear}
-                  className="px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={handleApply}
-                  disabled={!startDate}
-                  className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Navigation Row - shows when a period preset is selected */}
+      {showNavigation && (
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <button
+            onClick={() => handleNavigate('prev')}
+            className="p-1 hover:bg-slate-100 rounded transition-colors"
+            aria-label="Previous period"
+          >
+            <ChevronLeft className="h-4 w-4 text-slate-600" />
+          </button>
+          <span className="text-slate-700 font-medium min-w-[180px] text-center">
+            {getDisplayRange()}
+          </span>
+          <button
+            onClick={() => handleNavigate('next')}
+            disabled={!canNavigateNext}
+            className={`p-1 rounded transition-colors ${
+              canNavigateNext
+                ? 'hover:bg-slate-100 text-slate-600'
+                : 'text-slate-300 cursor-not-allowed'
+            }`}
+            aria-label="Next period"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
       )}
 
-      {/* Mobile Panel - Modal with Backdrop */}
-      {isOpen && isMobile && (
+      {/* Custom Date Picker Popover */}
+      {showCustomPicker && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsOpen(false)
-          }}
+          ref={pickerRef}
+          className="absolute top-full mt-2 right-0 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-4"
         >
-          <div className="bg-white rounded-xl shadow-2xl mx-4 max-w-sm w-full max-h-[90vh] overflow-y-auto">
-            {/* Header with close button */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-              <h2 className="font-semibold text-slate-800">Select Date Range</h2>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-1 hover:bg-slate-100 rounded-md transition-colors"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5 text-slate-500" />
-              </button>
-            </div>
+          {/* Month Navigation */}
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setCalendarMonth(prev => subMonths(prev, 1))}
+              className="p-1 hover:bg-slate-100 rounded-md transition-colors"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-5 w-5 text-slate-600" />
+            </button>
+            <span className="font-semibold text-slate-700">
+              {format(calendarMonth, 'MMMM yyyy')}
+            </span>
+            <button
+              onClick={() => setCalendarMonth(prev => addMonths(prev, 1))}
+              className="p-1 hover:bg-slate-100 rounded-md transition-colors"
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-5 w-5 text-slate-600" />
+            </button>
+          </div>
 
-            {/* Presets as horizontal chips */}
-            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
-              <div className="flex flex-wrap gap-2">
-                {presets.filter(p => !p.key.startsWith('divider')).map((preset) => {
-                  const isActive = dateRangeType === preset.type && !startDate && !endDate
+          {/* Calendar */}
+          <MonthCalendar
+            month={calendarMonth}
+            startDate={customStart}
+            endDate={customEnd}
+            hoverDate={hoverDate}
+            onDateClick={handleDateClick}
+            onDateHover={setHoverDate}
+          />
 
-                  return (
-                    <button
-                      key={preset.key}
-                      onClick={() => handlePresetClick(preset)}
-                      className={`
-                        whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors
-                        ${isActive
-                          ? 'bg-blue-600 text-white font-medium'
-                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                        }
-                      `}
-                    >
-                      {preset.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+          {/* Selection Display */}
+          {customStart && (
+            <p className="text-sm text-slate-600 text-center mt-3">
+              {customEnd
+                ? `${format(customStart, 'MMM d')} - ${format(customEnd, 'MMM d, yyyy')}`
+                : `${format(customStart, 'MMM d, yyyy')} - Select end date`
+              }
+            </p>
+          )}
 
-            {/* Calendar section */}
-            <div className="p-4">
-              {/* Month Navigation */}
-              <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => navigateMonths('prev')}
-                  className="p-2 hover:bg-slate-100 rounded-md transition-colors"
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft className="h-5 w-5 text-slate-600" />
-                </button>
-                <span className="font-semibold text-slate-700">
-                  {format(leftMonth, 'MMMM yyyy')}
-                </span>
-                <button
-                  onClick={() => navigateMonths('next')}
-                  className="p-2 hover:bg-slate-100 rounded-md transition-colors"
-                  aria-label="Next month"
-                >
-                  <ChevronRight className="h-5 w-5 text-slate-600" />
-                </button>
-              </div>
-
-              {/* Single Calendar (no month title since it's in nav) */}
-              <div className="flex justify-center">
-                <MonthCalendar
-                  month={leftMonth}
-                  startDate={startDate}
-                  endDate={endDate}
-                  hoverDate={hoverDate}
-                  onDateClick={handleDateClick}
-                  onDateHover={setHoverDate}
-                  hideTitle
-                />
-              </div>
-
-              {/* Helper text */}
-              <p className="text-xs text-slate-400 text-center mt-4">
-                {startDate && !endDate
-                  ? 'Tap another date to complete your range'
-                  : 'Tap a date to start, tap another to end'
-                }
-              </p>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex gap-3 p-4 border-t border-slate-100">
-              <button
-                onClick={handleClear}
-                className="flex-1 px-4 py-2.5 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors font-medium"
-              >
-                Clear
-              </button>
-              <button
-                onClick={handleApply}
-                disabled={!startDate}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Apply
-              </button>
-            </div>
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-slate-100">
+            <button
+              onClick={() => setShowCustomPicker(false)}
+              className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApplyCustom}
+              disabled={!customStart}
+              className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Apply
+            </button>
           </div>
         </div>
       )}

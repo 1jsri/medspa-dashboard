@@ -2,6 +2,7 @@
 
 import { RefreshCw, Database, Cloud, FileSpreadsheet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import type { DataSource } from '@/hooks/use-dashboard-data'
 
 interface HeaderProps {
@@ -38,25 +39,28 @@ function DataSourceBadge({ source }: { source: DataSource }) {
   return (
     <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium ${className}`}>
       <Icon className="h-3 w-3" />
-      {label}
+      <span className="hidden sm:inline">{label}</span>
     </div>
   )
 }
 
 export function Header({ title, description, onRefresh, isLoading, lastUpdated, dataSource, filterElement }: HeaderProps) {
   return (
-    <div className="flex items-center justify-between border-b bg-white px-6 py-4">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+    <div className="flex flex-col gap-3 border-b bg-white px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6 md:py-4">
+      {/* Title Section */}
+      <div className="min-w-0 flex-1">
+        <h1 className="text-lg font-bold text-slate-900 md:text-2xl truncate">{title}</h1>
         {description && (
-          <p className="text-sm text-slate-500">{description}</p>
+          <p className="text-sm text-slate-500 hidden sm:block">{description}</p>
         )}
       </div>
-      <div className="flex items-center gap-4">
+
+      {/* Actions Section */}
+      <div className="flex flex-wrap items-center gap-2 md:gap-4">
         {filterElement}
         {dataSource && <DataSourceBadge source={dataSource} />}
         {lastUpdated && (
-          <span className="text-xs text-slate-400">
+          <span className="hidden lg:inline text-xs text-slate-400">
             Last updated: {new Date(lastUpdated).toLocaleTimeString()}
           </span>
         )}
@@ -66,16 +70,13 @@ export function Header({ title, description, onRefresh, isLoading, lastUpdated, 
             size="sm"
             onClick={onRefresh}
             disabled={isLoading}
+            className="px-2 md:px-4"
           >
-            <RefreshCw className={cn('h-4 w-4 mr-2', isLoading && 'animate-spin')} />
-            Refresh
+            <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+            <span className="hidden md:inline ml-2">Refresh</span>
           </Button>
         )}
       </div>
     </div>
   )
-}
-
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(' ')
 }

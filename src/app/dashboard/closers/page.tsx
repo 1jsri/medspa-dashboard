@@ -18,13 +18,13 @@ import { Trophy, Medal, Award } from 'lucide-react'
 import { DateRangeFilter } from '@/components/filters/date-range-filter'
 
 export default function ClosersPage() {
-  const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
+  const { data, isLoading, isError, dataSource } = useDashboardData()
 
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
         <Header title="Closer Leaderboard" description="Performance comparison" />
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-4 md:p-6">
           <DashboardSkeleton />
         </div>
       </div>
@@ -35,7 +35,7 @@ export default function ClosersPage() {
     return (
       <div className="flex flex-col h-full">
         <Header title="Closer Leaderboard" />
-        <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="flex-1 p-4 md:p-6 flex items-center justify-center">
           <p className="text-slate-500">Failed to load data. Please try again.</p>
         </div>
       </div>
@@ -52,15 +52,13 @@ export default function ClosersPage() {
       <Header
         title="Closer Leaderboard"
         description="Compare closer performance metrics"
-        onRefresh={refresh}
-        isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
         filterElement={<DateRangeFilter />}
       />
-      <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+      <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
         {/* Top Performers */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
           <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3 mb-4">

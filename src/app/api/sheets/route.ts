@@ -1,66 +1,67 @@
 import { NextResponse } from 'next/server'
-import { readExcelData, getDemoData } from '@/lib/excel-reader'
+import { readExcelData } from '@/lib/excel-reader'
 import { fetchSheetsData, hasGoogleCredentials } from '@/lib/google-sheets'
 import { transformData } from '@/lib/data-transformer'
+import type { RawSheetsData } from '@/types/sheets'
 
 export const revalidate = 60 // Cache for 60 seconds
 export const dynamic = 'force-dynamic' // Ensure fresh data on each request
 
-export async function GET(request: Request) {
-  // Check if demo mode is explicitly requested via query param
-  const { searchParams } = new URL(request.url)
-  const forceDemo = searchParams.get('demo') === 'true'
-
+export async function GET() {
   try {
-    let rawData
-    let dataSource = 'demo'
-    let errorDetails: string[] = []
+    let rawData: RawSheetsData | null = null
+    let dataSource = 'none'
+    const errorDetails: string[] = []
 
-    if (forceDemo) {
-      // Explicitly requested demo mode
-      rawData = getDemoData()
-      dataSource = 'demo'
-      console.log('Using demo data (explicitly requested)')
+    // Priority 1: Try Google Sheets if credentials are configured
+    if (hasGoogleCredentials()) {
+      try {
+        console.log('Attempting to fetch from Google Sheets...')
+        rawData = await fetchSheetsData()
+        dataSource = 'google-sheets'
+        console.log(`✓ Loaded ${rawData.bookedCalls.length} booked calls and ${rawData.saleSubmissions.length} sales from Google Sheets`)
+      } catch (googleError) {
+        const errorMsg = googleError instanceof Error ? googleError.message : String(googleError)
+        console.error('✗ Google Sheets error:', errorMsg)
+        errorDetails.push(`Google Sheets: ${errorMsg}`)
+        rawData = null
+      }
     } else {
-      // Priority 1: Try Google Sheets if credentials are configured
-      if (hasGoogleCredentials()) {
-        try {
-          console.log('Attempting to fetch from Google Sheets...')
-          rawData = await fetchSheetsData()
-          dataSource = 'google-sheets'
-          console.log(`✓ Loaded ${rawData.bookedCalls.length} booked calls and ${rawData.saleSubmissions.length} sales from Google Sheets`)
-        } catch (googleError) {
-          const errorMsg = googleError instanceof Error ? googleError.message : String(googleError)
-          console.error('✗ Google Sheets error:', errorMsg)
-          errorDetails.push(`Google Sheets: ${errorMsg}`)
-          rawData = null
-        }
-      } else {
-        console.log('Google Sheets credentials not configured')
-        errorDetails.push('Google Sheets: credentials not configured')
-      }
+      console.log('Google Sheets credentials not configured')
+      errorDetails.push('Google Sheets: credentials not configured')
+    }
 
-      // Priority 2: Fall back to local Excel files
-      if (!rawData) {
-        try {
-          console.log('Attempting to read local Excel files...')
-          rawData = readExcelData()
-          dataSource = 'excel'
-          console.log(`✓ Loaded ${rawData.bookedCalls.length} booked calls and ${rawData.saleSubmissions.length} sales from Excel`)
-        } catch (fileError) {
-          const errorMsg = fileError instanceof Error ? fileError.message : String(fileError)
-          console.error('✗ Excel file error:', errorMsg)
-          errorDetails.push(`Excel: ${errorMsg}`)
-          rawData = null
-        }
+    // Priority 2: Fall back to local Excel files
+    if (!rawData) {
+      try {
+        console.log('Attempting to read local Excel files...')
+        rawData = readExcelData()
+        dataSource = 'excel'
+        console.log(`✓ Loaded ${rawData.bookedCalls.length} booked calls and ${rawData.saleSubmissions.length} sales from Excel`)
+      } catch (fileError) {
+        const errorMsg = fileError instanceof Error ? fileError.message : String(fileError)
+        console.error('✗ Excel file error:', errorMsg)
+        errorDetails.push(`Excel: ${errorMsg}`)
+        rawData = null
       }
+    }
 
-      // Priority 3: Fall back to demo data ONLY if both real data sources failed
-      if (!rawData) {
-        console.warn('⚠ All data sources failed, falling back to demo data')
-        rawData = getDemoData()
-        dataSource = 'demo'
+    // No demo data fallback - return empty data with error info if both sources failed
+    if (!rawData) {
+      console.error('✗ All data sources failed - returning empty data')
+      rawData = {
+        bookedCalls: [],
+        saleSubmissions: [],
+        lastUpdated: new Date().toISOString(),
       }
+      dataSource = 'none'
+    }
+
+    // Debug logging to help diagnose data issues
+    console.log('[API] Booked calls fetched:', rawData.bookedCalls.length)
+    console.log('[API] Sales submissions fetched:', rawData.saleSubmissions.length)
+    if (rawData.bookedCalls.length > 0) {
+      console.log('[API] Sample booking dates:', rawData.bookedCalls.slice(0, 3).map(c => c.bookingDate))
     }
 
     const dashboardData = transformData(rawData)
@@ -70,9 +71,9 @@ export async function GET(request: Request) {
       _meta: {
         dataSource,
         lastFetched: new Date().toISOString(),
-        ...(dataSource === 'demo' && errorDetails.length > 0 && {
+        ...(dataSource === 'none' && errorDetails.length > 0 && {
           errors: errorDetails,
-          warning: 'Showing demo data because real data sources failed. Check your configuration.'
+          warning: 'No data loaded - all data sources failed. Check your configuration.'
         }),
       }
     }, {

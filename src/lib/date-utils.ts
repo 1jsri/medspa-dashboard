@@ -46,28 +46,28 @@ export interface DateFilterState {
 export const dateRangeLabels: Record<DateRangeType, string> = {
   all: 'All Time',
   today: 'Today',
-  wtd: 'Week to Date',
-  mtd: 'Month to Date',
-  qtd: 'Quarter to Date',
-  ytd: 'Year to Date',
-  lastWeek: 'Last Week',
-  lastMonth: 'Last Month',
+  wtd: 'This Week',
+  mtd: 'This Month',
+  qtd: 'This Quarter',
+  ytd: 'This Year',
+  lastWeek: 'Last 7 Days',
+  lastMonth: 'Last 30 Days',
   lastQuarter: 'Last Quarter',
   lastYear: 'Last Year',
-  specificMonth: 'Specific Month',
+  specificMonth: 'Pick Month',
   custom: 'Custom Range',
 }
 
 export const dateRangeShortLabels: Record<DateRangeType, string> = {
   all: 'All',
   today: 'Today',
-  wtd: 'WTD',
-  mtd: 'MTD',
-  qtd: 'QTD',
-  ytd: 'YTD',
-  lastWeek: 'Last Week',
-  lastMonth: 'Last Month',
-  lastQuarter: 'Last Quarter',
+  wtd: 'This Week',
+  mtd: 'This Month',
+  qtd: 'This Qtr',
+  ytd: 'This Year',
+  lastWeek: 'Last 7d',
+  lastMonth: 'Last 30d',
+  lastQuarter: 'Last Qtr',
   lastYear: 'Last Year',
   specificMonth: 'Month',
   custom: 'Custom',
@@ -258,7 +258,15 @@ export function isDateInRange(dateStr: string | undefined | null, bounds: DateBo
     return false
   }
 
-  const date = new Date(dateStr)
+  // Parse YYYY-MM-DD as local date (not UTC) to avoid timezone issues
+  let date: Date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    date = new Date(year, month - 1, day)
+  } else {
+    date = new Date(dateStr)
+  }
+
   if (isNaN(date.getTime())) {
     return false
   }

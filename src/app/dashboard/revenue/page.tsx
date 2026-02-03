@@ -23,13 +23,13 @@ import { DollarSign, CreditCard, AlertCircle, TrendingUp, Download } from 'lucid
 import { DateRangeFilter } from '@/components/filters/date-range-filter'
 
 export default function RevenuePage() {
-  const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
+  const { data, comparisons, isLoading, isError, dataSource } = useDashboardData()
 
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
         <Header title="Revenue" description="Financial performance" />
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-4 md:p-6">
           <DashboardSkeleton />
         </div>
       </div>
@@ -40,7 +40,7 @@ export default function RevenuePage() {
     return (
       <div className="flex flex-col h-full">
         <Header title="Revenue" />
-        <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="flex-1 p-4 md:p-6 flex items-center justify-center">
           <p className="text-slate-500">Failed to load data. Please try again.</p>
         </div>
       </div>
@@ -109,28 +109,26 @@ export default function RevenuePage() {
       <Header
         title="Revenue"
         description="Track revenue, cash collection, and outstanding balances"
-        onRefresh={refresh}
-        isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
         filterElement={<DateRangeFilter />}
       />
-      <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+      <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
         {/* Revenue KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <KPICard
             title="Total Revenue"
             value={formatCurrency(data.revenueData.totalRevenue)}
             description={`${data.revenueData.totalDeals} closed deals`}
             icon={DollarSign}
-            trend={data.kpiTrends?.revenue || undefined}
+            comparison={comparisons?.totalRevenue}
           />
           <KPICard
             title="Cash Collected"
             value={formatCurrency(data.revenueData.cashCollected)}
             description={`${(collectionRate * 100).toFixed(0)}% collection rate`}
             icon={CreditCard}
-            trend={data.kpiTrends?.cashCollected || undefined}
+            comparison={comparisons?.cashCollected}
           />
           <KPICard
             title="Outstanding Balance"
@@ -143,12 +141,12 @@ export default function RevenuePage() {
             value={formatCurrency(data.revenueData.avgDealSize)}
             description="Per closed deal"
             icon={TrendingUp}
-            trend={data.kpiTrends?.avgDealSize || undefined}
+            comparison={comparisons?.avgDealSize}
           />
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <div className="relative">
             <RevenueChart data={data.monthlyRevenue} />
             <Button
@@ -170,7 +168,7 @@ export default function RevenuePage() {
             <CardTitle className="text-lg">Collection Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
               <div className="p-4 bg-emerald-50 rounded-lg">
                 <p className="text-sm text-emerald-700 font-medium">Fully Paid</p>
                 <p className="text-2xl font-bold text-emerald-900 mt-1">
@@ -228,7 +226,7 @@ export default function RevenuePage() {
                   {clientsWithBalance
                     .sort((a, b) => b.balance - a.balance)
                     .map((client, index) => (
-                      <TableRow key={client.email || `${client.name}-${index}`}>
+                      <TableRow key={`${client.email}-${index}`}>
                         <TableCell className="font-medium">{client.name}</TableCell>
                         <TableCell>{client.program || 'N/A'}</TableCell>
                         <TableCell className="text-right">

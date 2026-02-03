@@ -13,13 +13,13 @@ import { Calendar, Users, TrendingUp, DollarSign, Target, Zap } from 'lucide-rea
 import { DateRangeFilter } from '@/components/filters/date-range-filter'
 
 export default function DashboardPage() {
-  const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
+  const { data, comparisons, isLoading, isError, dataSource } = useDashboardData()
 
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
         <Header title="Executive Summary" description="Overview of your MedSpa performance" />
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-4 md:p-6">
           <DashboardSkeleton />
         </div>
       </div>
@@ -30,7 +30,7 @@ export default function DashboardPage() {
     return (
       <div className="flex flex-col h-full">
         <Header title="Executive Summary" />
-        <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="flex-1 p-4 md:p-6 flex items-center justify-center">
           <p className="text-slate-500">Failed to load data. Please try again.</p>
         </div>
       </div>
@@ -44,15 +44,13 @@ export default function DashboardPage() {
       <Header
         title="Executive Summary"
         description="Overview of your MedSpa performance"
-        onRefresh={refresh}
-        isLoading={isLoading}
         lastUpdated={data.lastUpdated}
         dataSource={dataSource}
         filterElement={<DateRangeFilter />}
       />
-      <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+      <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <KPICard
             title="Total Booked"
             value={data.kpis.totalBooked}
@@ -64,25 +62,26 @@ export default function DashboardPage() {
             value={formatPercent(data.kpis.conversionRate)}
             description="Booked to closed ratio"
             icon={Target}
+            comparison={comparisons?.conversionRate}
           />
           <KPICard
             title="Total Revenue"
             value={formatCurrency(data.kpis.totalRevenue)}
             description="From closed deals"
             icon={DollarSign}
-            trend={data.kpiTrends?.revenue || undefined}
+            comparison={comparisons?.totalRevenue}
           />
           <KPICard
             title="Avg Deal Size"
             value={formatCurrency(data.kpis.avgDealSize)}
             description="Average package value"
             icon={TrendingUp}
-            trend={data.kpiTrends?.avgDealSize || undefined}
+            comparison={comparisons?.avgDealSize}
           />
         </div>
 
         {/* Secondary KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
           <KPICard
             title="Attendance Rate"
             value={formatPercent(data.kpis.attendanceRate)}
@@ -94,17 +93,19 @@ export default function DashboardPage() {
             value={formatPercent(data.kpis.closeRate)}
             description={`${data.kpis.totalClosed} closed of ${data.kpis.totalAttended} attended`}
             icon={Zap}
+            comparison={comparisons?.closeRate}
           />
           <KPICard
             title="Cash Collected"
             value={formatCurrency(data.revenueData.cashCollected)}
             description={`${formatCurrency(data.revenueData.outstandingBalance)} outstanding`}
             icon={DollarSign}
+            comparison={comparisons?.cashCollected}
           />
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <ConversionFunnel stages={data.funnelStages} />
           <RevenueChart data={data.monthlyRevenue} />
         </div>

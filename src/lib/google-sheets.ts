@@ -73,8 +73,18 @@ function parsePrice(value: string | number | undefined): number {
   return isNaN(num) ? 0 : num
 }
 
-function parseDate(value: string | number | undefined): string {
+// Extract year from tab name: "June" -> 2025, "January 26" -> 2026
+function getYearFromTabName(tabName: string): number {
+  if (tabName.includes('26')) return 2026
+  if (tabName.includes('25')) return 2025
+  // Default: tabs like "June", "July" etc are from 2025
+  return 2025
+}
+
+function parseDate(value: string | number | undefined, yearHint?: number): string {
   if (!value) return ''
+
+  const targetYear = yearHint || 2025
 
   // Handle numeric serial dates (Google Sheets returns these)
   // Excel/Sheets serial: days since Dec 30, 1899
@@ -85,7 +95,10 @@ function parseDate(value: string | number | undefined): string {
     if (numValue >= 1 && numValue < 100000) {
       const date = new Date((numValue - 25569) * 86400 * 1000)
       if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0]
+        // Get month and day from the serial date, but use the year hint
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${targetYear}-${month}-${day}`
       }
     }
   }
@@ -96,14 +109,20 @@ function parseDate(value: string | number | undefined): string {
   // Try parsing as a date
   const parsed = new Date(cleaned)
   if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().split('T')[0]
+    // If the parsed year is reasonable (2020+), use it; otherwise use yearHint
+    const parsedYear = parsed.getFullYear()
+    const year = parsedYear >= 2020 ? parsedYear : targetYear
+    const month = String(parsed.getMonth() + 1).padStart(2, '0')
+    const day = String(parsed.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
-  // If no year in the string, assume current year
-  const currentYear = new Date().getFullYear()
-  const withYear = new Date(cleaned + ', ' + currentYear)
+  // If no year in the string, use the year hint
+  const withYear = new Date(cleaned + ', ' + targetYear)
   if (!isNaN(withYear.getTime())) {
-    return withYear.toISOString().split('T')[0]
+    const month = String(withYear.getMonth() + 1).padStart(2, '0')
+    const day = String(withYear.getDate()).padStart(2, '0')
+    return `${targetYear}-${month}-${day}`
   }
 
   return ''
@@ -212,7 +231,7 @@ function detectSalesColumns(headers: (string | undefined)[]): SalesColumnMapping
   return mapping as SalesColumnMapping
 }
 
-function parseBookedCallRow(row: string[], mapping: BookedCallsColumnMapping): BookedCallRow | null {
+function parseBookedCallRow(row: string[], mapping: BookedCallsColumnMapping, yearHint?: number): BookedCallRow | null {
   const firstName = normalizeString(row[mapping.firstName])
   const lastName = normalizeString(row[mapping.lastName])
 
@@ -220,7 +239,7 @@ function parseBookedCallRow(row: string[], mapping: BookedCallsColumnMapping): B
   if (!firstName && !lastName) return null
 
   const clientName = combineNames(firstName, lastName)
-  const callDate = parseDate(row[mapping.dateOfCall])
+  const callDate = parseDate(row[mapping.dateOfCall], yearHint)
   const expectedPackage = normalizeString(row[mapping.packagePurchase])
   const expectedPrice = parsePrice(row[mapping.expectedPrice])
   const closedRaw = normalizeString(row[mapping.closedStatus]).toLowerCase()
@@ -255,7 +274,7 @@ function parseBookedCallRow(row: string[], mapping: BookedCallsColumnMapping): B
   // Parse new fields
   const vibeRaw = mapping.vibe !== undefined ? normalizeString(row[mapping.vibe]) : ''
   const objectionRaw = mapping.objection !== undefined ? normalizeString(row[mapping.objection]) : ''
-  const lastContact = mapping.lastContact !== undefined ? parseDate(row[mapping.lastContact]) : ''
+  const lastContact = mapping.lastContact !== undefined ? parseDate(row[mapping.lastContact], yearHint) : ''
   const lastContactNotes = mapping.lastContactNotes !== undefined ? normalizeString(row[mapping.lastContactNotes]) : ''
   const city = mapping.city !== undefined ? normalizeString(row[mapping.city]) : ''
   const state = mapping.state !== undefined ? normalizeString(row[mapping.state]) : ''
@@ -344,7 +363,7 @@ function parseSalesRow(row: string[], mapping: SalesColumnMapping): SaleSubmissi
   }
 }
 
-function parseBookedCallsSheet(rows: string[][]): BookedCallRow[] {
+function parseBookedCallsSheet(rows: string[][], yearHint?: number): BookedCallRow[] {
   if (rows.length < 2) return []
 
   // Find header row (might be row 0 or row 1)
@@ -364,7 +383,7 @@ function parseBookedCallsSheet(rows: string[][]): BookedCallRow[] {
     const row = rows[i]
     if (!row || row.length === 0) continue
 
-    const parsed = parseBookedCallRow(row, mapping)
+    const parsed = parseBookedCallRow(row, mapping, yearHint)
     if (parsed) results.push(parsed)
   }
 
@@ -412,13 +431,14 @@ export async function fetchSheetsData(): Promise<RawSheetsData> {
   if (bookedCallsRange) {
     // If a specific range is configured, use it
     const rows = await getSheetData(bookedCallsSheetId, bookedCallsRange)
-    allBookedCalls.push(...parseBookedCallsSheet(rows))
+    allBookedCalls.push(...parseBookedCallsSheet(rows, 2025))
   } else {
     // Otherwise, fetch from all monthly sheets
     for (const sheetName of BOOKED_CALLS_SHEET_NAMES) {
       try {
         const rows = await getSheetData(bookedCallsSheetId, `${sheetName}!A:Z`)
-        const calls = parseBookedCallsSheet(rows)
+        const yearHint = getYearFromTabName(sheetName)
+        const calls = parseBookedCallsSheet(rows, yearHint)
         allBookedCalls.push(...calls)
       } catch (error) {
         // Sheet might not exist, skip it
@@ -438,28 +458,3 @@ export async function fetchSheetsData(): Promise<RawSheetsData> {
   }
 }
 
-// Demo data for development/preview
-export function getDemoData(): RawSheetsData {
-  const bookedCalls: BookedCallRow[] = [
-    { clientName: 'Sarah Johnson', clientEmail: 'sarah.j@email.com', clientPhone: '555-0101', bookingDate: '2024-01-05', callDate: '2024-01-08', callStatus: 'Attended', closer: 'Hannah', expectedPackage: 'Premium Facial Package', expectedPrice: 2500, closedStatus: 'Closed', notes: '', currency: 'USD', setter: 'Michael', vibe: 'Hot', objection: null, lastContact: '2024-01-08', lastContactNotes: 'Great call, very interested', city: 'Toronto', state: 'Ontario' },
-    { clientName: 'Emily Chen', clientEmail: 'emily.chen@email.com', clientPhone: '555-0102', bookingDate: '2024-01-06', callDate: '2024-01-10', callStatus: 'Attended', closer: 'Michael', expectedPackage: 'Body Contouring', expectedPrice: 4000, closedStatus: 'Closed', notes: '', currency: 'USD', setter: 'Hannah', vibe: 'Warm', objection: null, lastContact: '2024-01-10', lastContactNotes: 'Discussed financing options', city: 'Vancouver', state: 'British Columbia' },
-    { clientName: 'Jessica Williams', clientEmail: 'jessica.w@email.com', clientPhone: '555-0103', bookingDate: '2024-01-12', callDate: '2024-01-15', callStatus: 'No Show', closer: 'Hannah', expectedPackage: 'Laser Treatment', expectedPrice: 1800, closedStatus: 'Not Closed', notes: '', currency: 'USD', setter: 'Michael', vibe: 'Cold', objection: null, lastContact: '2024-01-16', lastContactNotes: 'Left voicemail', city: 'Calgary', state: 'Alberta' },
-    { clientName: 'Amanda Davis', clientEmail: 'amanda.d@email.com', clientPhone: '555-0104', bookingDate: '2024-01-08', callDate: '2024-01-12', callStatus: 'Attended', closer: 'Michael', expectedPackage: 'Premium Facial Package', expectedPrice: 2500, closedStatus: 'Not Closed', notes: '', currency: 'USD', setter: 'Hannah', vibe: 'On Fence', objection: 'Price', lastContact: '2024-01-13', lastContactNotes: 'Needs to discuss with husband', city: 'Montreal', state: 'Quebec' },
-    { clientName: 'Rachel Green', clientEmail: 'rachel.g@email.com', clientPhone: '555-0105', bookingDate: '2024-01-03', callDate: '2024-01-07', callStatus: 'Attended', closer: 'Hannah', expectedPackage: 'Body Contouring', expectedPrice: 4000, closedStatus: 'Not Closed', notes: '', currency: 'USD', setter: 'Michael', vibe: 'Warm', objection: 'Timing', lastContact: '2024-01-08', lastContactNotes: 'Will follow up next week', city: 'Ottawa', state: 'Ontario' },
-    { clientName: 'Monica Geller', clientEmail: 'monica.g@email.com', clientPhone: '555-0106', bookingDate: '2024-01-02', callDate: '', callStatus: 'Scheduled', closer: 'Michael', expectedPackage: 'Laser Treatment', expectedPrice: 1800, closedStatus: 'Pending', notes: '', currency: 'USD', setter: 'Hannah', vibe: null, objection: null, lastContact: '', lastContactNotes: '', city: 'Toronto', state: 'Ontario' },
-    { clientName: 'Phoebe Buffay', clientEmail: 'phoebe.b@email.com', clientPhone: '555-0107', bookingDate: '2024-01-01', callDate: '2024-01-05', callStatus: 'Rescheduled', closer: 'Hannah', expectedPackage: 'Premium Facial Package', expectedPrice: 2500, closedStatus: 'Pending', notes: 'Reschedules: 2', currency: 'USD', setter: 'Michael', vibe: 'Warm', objection: null, lastContact: '2024-01-06', lastContactNotes: 'Rescheduled for next week', city: 'Vancouver', state: 'British Columbia' },
-    { clientName: 'Chandler Bing', clientEmail: 'chandler.b@email.com', clientPhone: '555-0108', bookingDate: '2024-01-10', callDate: '2024-01-14', callStatus: 'Cancelled', closer: 'Michael', expectedPackage: 'Body Contouring', expectedPrice: 4000, closedStatus: 'Not Closed', notes: '', currency: 'USD', setter: 'Hannah', vibe: 'Cold', objection: 'Spouse', lastContact: '2024-01-14', lastContactNotes: 'Wife not interested', city: 'Edmonton', state: 'Alberta' },
-  ]
-
-  const saleSubmissions: SaleSubmissionRow[] = [
-    { clientEmail: 'sarah.j@email.com', clientName: 'Sarah Johnson', clientPhone: '555-0101', bookingDate: '2024-01-05', purchaseDate: '2024-01-08', program: 'Premium Facial Package', price: 2500, cashCollected: 2500, balance: 0, paymentMethod: 'Credit Card', notes: '', closer: 'Hannah', setter: 'Michael', currency: 'USD', paymentStatus: '' },
-    { clientEmail: 'emily.chen@email.com', clientName: 'Emily Chen', clientPhone: '555-0102', bookingDate: '2024-01-06', purchaseDate: '2024-01-10', program: 'Body Contouring', price: 4000, cashCollected: 2000, balance: 2000, paymentMethod: 'Financing', notes: '', closer: 'Michael', setter: 'Hannah', currency: 'USD', paymentStatus: 'Waiting on financing' },
-    { clientEmail: 'lisa.smith@email.com', clientName: 'Lisa Smith', clientPhone: '555-0109', bookingDate: '2024-01-04', purchaseDate: '2024-01-07', program: 'Laser Treatment', price: 1800, cashCollected: 900, balance: 900, paymentMethod: 'Payment Plan', notes: '', closer: 'Hannah', setter: 'Michael', currency: 'USD', paymentStatus: 'Payment plan active' },
-  ]
-
-  return {
-    bookedCalls,
-    saleSubmissions,
-    lastUpdated: new Date().toISOString(),
-  }
-}

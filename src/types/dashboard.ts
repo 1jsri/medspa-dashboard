@@ -2,6 +2,22 @@
 
 import type { VibeType, ObjectionType } from './sheets'
 
+// Comparison types for period-over-period analysis
+export interface ComparisonResult {
+  value: number         // percentage change for dollar amounts, point change for rates
+  isPositive: boolean
+  label: string         // "vs November 2023"
+  type: 'percent' | 'points'  // how to display the change
+}
+
+export interface KPIComparisons {
+  totalRevenue: ComparisonResult | null
+  cashCollected: ComparisonResult | null
+  avgDealSize: ComparisonResult | null
+  conversionRate: ComparisonResult | null
+  closeRate: ComparisonResult | null
+}
+
 export type JourneyStage = 'booked' | 'attended' | 'closed' | 'paid'
 
 export interface TrendData {

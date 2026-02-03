@@ -156,7 +156,7 @@ function PipelineContent({ data }: { data: DashboardData }) {
 
   return (
     <>
-      <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+      <div className="flex-1 p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto">
         {/* Action Items */}
         <ActionItems
           actionItems={data.actionItems}
@@ -166,7 +166,7 @@ function PipelineContent({ data }: { data: DashboardData }) {
           onStaleClick={handleStaleClick}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           <ConversionFunnel
             stages={data.funnelStages}
             onStageClick={handleStageClick}
@@ -281,7 +281,7 @@ function PipelineContent({ data }: { data: DashboardData }) {
             <CardTitle className="text-lg">Conversion Insights</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
               <div className="text-center p-4 bg-blue-50 rounded-lg">
                 <p className="text-3xl font-bold text-blue-600">
                   {formatPercent(data.kpis.attendanceRate)}
@@ -334,13 +334,13 @@ function PipelineContent({ data }: { data: DashboardData }) {
 }
 
 export default function PipelinePage() {
-  const { data, isLoading, isError, refresh, dataSource } = useDashboardData()
+  const { data, isLoading, isError, dataSource } = useDashboardData()
 
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
         <Header title="Pipeline" description="Conversion funnel analysis" />
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-4 md:p-6">
           <DashboardSkeleton />
         </div>
       </div>
@@ -351,7 +351,7 @@ export default function PipelinePage() {
     return (
       <div className="flex flex-col h-full">
         <Header title="Pipeline" />
-        <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="flex-1 p-4 md:p-6 flex items-center justify-center">
           <p className="text-slate-500">Failed to load data. Please try again.</p>
         </div>
       </div>
@@ -364,8 +364,6 @@ export default function PipelinePage() {
         <Header
           title="Pipeline"
           description="Track clients through your conversion funnel"
-          onRefresh={refresh}
-          isLoading={isLoading}
           lastUpdated={data.lastUpdated}
           dataSource={dataSource}
           filterElement={<DateRangeFilter />}
